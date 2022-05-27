@@ -145,6 +145,8 @@ class AIPlayer:
                 level +=1
                 leaves = Tree.getLeafNodesUnPrunedAndOpponent(level)
                 if level > 1000:
+                    if bestMove is None:
+                        return get_valid_moves(board)[0]
                     return bestMove.moves[0]
             leafToExpand = leaves[random.randint(0, len(leaves) - 1)]
             move = self.doMyMovesAndOpponentMoves(leafToExpand, bestScore)
@@ -194,9 +196,10 @@ class AIPlayer:
             opponentNewNodes = self.doBranch(myMove, self.other_player_number)
             selections = self.prune(opponentNewNodes)
             # determine if branch contains new best move
-            if selections[0].stateScore > bestScore:
-                newBestMove = selections[random.randint(0, len(selections)-1)]
-                bestScore = newBestMove.stateScore
+            if len(selections) > 0:
+                if selections[0].stateScore > bestScore:
+                    newBestMove = selections[random.randint(0, len(selections)-1)]
+                    bestScore = newBestMove.stateScore
 
 
 
@@ -266,7 +269,7 @@ class AIPlayer:
         print(currentUtility)
 
         # time limit in seconds
-        TIME_LIMIT = 5
+        TIME_LIMIT = 1
 
         Tree = Node(board, True)
         startTime = time.time()
