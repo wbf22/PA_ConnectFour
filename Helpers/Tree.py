@@ -38,6 +38,10 @@ class Node:
         self.children.append(child)
 
     def getChildren(self):
+        """
+        RETURNS:
+        The immediate children of the node but not the children's children etc..
+        """
         return self.children
 
     def getLevel(self):
@@ -65,8 +69,20 @@ class Node:
 
         return [des for des in self.descendants if des.leafNode == True and des.pruned == False and len(des.moves) == level and des.opponentMove == True and des.winState == False]
 
+    def getLeafNodesOfLevel(self, level):
+        if len(self.descendants) == 0:
+            return [self]
+
+        return [des for des in self.descendants if des.leafNode == True and des.level == level and des.opponentMove == True and des.winState == False]
+
+    def getNodesOfLevel(self, level):
+        if len(self.descendants) == 0:
+            return [self]
+
+        return [des for des in self.descendants if des.level == level]
+
     def getDepthStatistics(self):
-        depths = [x.moves[-1] for x in self.descendants]
+        depths = [x.level for x in self.descendants]
         mean = np.nanmean(depths)
         median = np.nanmedian(depths)
         sd = np.nanstd(depths)

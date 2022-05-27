@@ -49,8 +49,7 @@ class Game:
             if current_player.type == 'ai':
                 
                 if self.players[int(not self.current_turn)].type == 'random':
-                    # p_func = current_player.get_expectimax_move
-                    p_func = current_player.get_alpha_beta_move
+                    p_func = current_player.get_expectimax_move
                 else:
                     p_func = current_player.get_alpha_beta_move
                 

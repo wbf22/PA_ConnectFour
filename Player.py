@@ -277,17 +277,30 @@ class AIPlayer:
         level = 0
         while time.time() - startTime < TIME_LIMIT:
             # only explore branches where unPruned, is after opponent move, is the most recent level, and isn't an opponent win state
-            leaves = Tree.getLeafNodesUnPrunedAndOpponent(level)
+            leaves = Tree.getLeafNodesOfLevel(level)
             while (len(leaves) == 0):
                 level += 1
-                leaves = Tree.getLeafNodesUnPrunedAndOpponent(level)
+                leaves = Tree.getLeafNodesOfLevel(level)
                 if level > 1000:
                     return bestMove.moves[0]
             leafToExpand = leaves[random.randint(0, len(leaves) - 1)]
-            move = self.doMyMovesAndOpponentMoves(leafToExpand, bestScore)
-            if move != None:
-                bestMove = move
-                bestScore = self.evaluation_function(bestMove.board, bestMove.level)[0]
+            self.doMyAndOpponentMoveExpecti(leafToExpand)
+
+            # update score of tree
+            sumLevel = level + 2
+            while sumLevel > 0:
+                nodesOfLevel = Tree.getNodesOfLevel(sumLevel)
+                for node in nodesOfLevel:
+                    if not node.leafNode:
+                        node.stateScore = self.getAverageOfKids(node)
+                sumLevel-=1
+            Tree.stateScore = self.getAverageOfKids(Tree)
+
+            # choose which path is the best
+            for node in Tree.children:
+                if node.stateScore > bestScore:
+                    bestMove = node
+                    bestScore = node.stateScore
 
         stats = Tree.getDepthStatistics()
         print("Mean ", stats[0])
@@ -306,6 +319,39 @@ class AIPlayer:
         print("Current Utility ", currentUtility)
         print()
         return bestMove.moves[0]
+
+    def doMyAndOpponentMoveExpecti(self, node):
+        # do the branch for my move
+        self.doBranchExpecti(node, self.player_number)
+
+        # do the branches for those nodes for the opponent
+        for myMove in node.children:
+            self.doBranchExpecti(myMove, self.other_player_number)
+
+
+    def doBranchExpecti(self, node, player_num):
+        validMoves = get_valid_moves(node.board)
+        newNodes = []
+
+        for move in validMoves:
+            newBoard = make_move(node.board, move, player_num)
+            newNode = Node(newBoard)
+            newNode.stateScore = self.evaluation_function(newNode.board, newNode.level)[0]
+            if player_num == self.other_player_number:
+                newNode.opponentMove = True
+            newNodes.append(newNode)
+            node.addChild(newNode, move)
+
+        node.stateScore = self.getAverageOfKids(node)
+
+    def getAverageOfKids(self, node):
+        total = 0
+        for myMove in node.children:
+            total += myMove.stateScore
+
+        if len(node.children) == 0: return 0
+        return total / len(node.children)
+
 
 
     def evaluation_function(self, board, depth):
