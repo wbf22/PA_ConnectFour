@@ -38,38 +38,62 @@ def is_winning_state(board):
     to_str = lambda a: ''.join(a.astype(str))
 
     def check_horizontal(b):
+        player = False
+        other = False
         for row in b:
             if player_win_str in to_str(row):
-                return True
+                player = True
             if other_win_str in to_str(row):
-                return True
-        return False
+                other = True
+            if player and other:
+                return True, True
+        return player, other
 
     def check_verticle(b):
         return check_horizontal(b.T)
 
     def check_diagonal(b):
+        player = False
+        other = False
         for op in [None, np.fliplr]:
             op_board = op(b) if op else b
             
             root_diag = np.diagonal(op_board, offset=0).astype(np.int)
             if player_win_str in to_str(root_diag):
-                return True
+                player = True
             if other_win_str in to_str(root_diag):
-                return True
+                other = True
 
             for i in range(1, b.shape[1]-3):
                 for offset in [i, -i]:
                     diag = np.diagonal(op_board, offset=offset)
                     diag = to_str(diag.astype(np.int))
                     if player_win_str in diag:
-                        return True
+                        player = True
+                    if other_win_str in diag:
+                        other = True
+                    if player and other:
+                        return True, True
 
-        return False
+        return player, other
 
-    return (check_horizontal(board) or
-            check_verticle(board) or
-            check_diagonal(board))
+    return (check_horizontal(board)[0] or check_verticle(board)[0] or check_diagonal(board)[0],
+            check_horizontal(board)[1] or check_verticle(board)[1] or check_diagonal(board)[1])
+
+def getPlayerTurn(board):
+    twos = 0
+    ones = 0
+    for row in board:
+        for c in row:
+            if c == 2:
+                twos += 1
+            if c == 1:
+                ones += 1
+
+    if ones > twos:
+        return 2
+    else:
+        return 1
 
 #The players!
 
@@ -112,7 +136,7 @@ class AIPlayer:
         random.seed(startTime)
 
         bestMove = None;
-        bestScore = 0;
+        bestScore = -10000000000000000;
         level = 0
         while time.time() - startTime < TIME_LIMIT:
             # only explore branches where unPruned, is after opponent move, is the most recent level, and isn't an opponent win state
@@ -153,6 +177,7 @@ class AIPlayer:
 
     def doMyMovesAndOpponentMoves(self, node, bestMoveSoFarScore):
         # new bestmove
+        bestScore = bestMoveSoFarScore
         newBestMove = None
 
         # do the branch for my move
@@ -169,8 +194,9 @@ class AIPlayer:
             opponentNewNodes = self.doBranch(myMove, self.other_player_number)
             selections = self.prune(opponentNewNodes)
             # determine if branch contains new best move
-            if self.evaluation_function(selections[0].board, selections[0].level)[0] > bestMoveSoFarScore:
+            if selections[0].stateScore > bestScore:
                 newBestMove = selections[random.randint(0, len(selections)-1)]
+                bestScore = newBestMove.stateScore
 
 
 
@@ -196,10 +222,9 @@ class AIPlayer:
         bestScore = 10000000
         for x in opponentNewNodes:
             x.pruned = True
-            xEval, x.winState = self.evaluation_function(x.board, x.level)
-            x.stateScore = xEval
-            if xEval <= bestScore:
-                bestScore = xEval
+            x.stateScore, x.winState = self.evaluation_function(x.board, x.level)
+            if x.stateScore <= bestScore:
+                bestScore = x.stateScore
 
         bestNodes = []
         for x in opponentNewNodes:
@@ -232,12 +257,55 @@ class AIPlayer:
         RETURNS:
         The 0 based index of the column that represents the next move
         """
-        valid_cols = []
-        for col in range(board.shape[1]):
-            if 0 in board[:, col]:
-                valid_cols.append(col)
 
-        return np.random.choice(valid_cols)
+        # do branch
+        # set score of parent to average of new children
+        # update scores of parent and parent of parent ...
+
+        currentUtility = self.evaluation_function(board, 0)[0]
+        print(currentUtility)
+
+        # time limit in seconds
+        TIME_LIMIT = 5
+
+        Tree = Node(board, True)
+        startTime = time.time()
+        random.seed(startTime)
+
+        bestMove = None;
+        bestScore = -10000000000000000;
+        level = 0
+        while time.time() - startTime < TIME_LIMIT:
+            # only explore branches where unPruned, is after opponent move, is the most recent level, and isn't an opponent win state
+            leaves = Tree.getLeafNodesUnPrunedAndOpponent(level)
+            while (len(leaves) == 0):
+                level += 1
+                leaves = Tree.getLeafNodesUnPrunedAndOpponent(level)
+                if level > 1000:
+                    return bestMove.moves[0]
+            leafToExpand = leaves[random.randint(0, len(leaves) - 1)]
+            move = self.doMyMovesAndOpponentMoves(leafToExpand, bestScore)
+            if move != None:
+                bestMove = move
+                bestScore = self.evaluation_function(bestMove.board, bestMove.level)[0]
+
+        stats = Tree.getDepthStatistics()
+        print("Mean ", stats[0])
+        print("Median ", stats[1])
+        print("STD ", stats[2])
+        print("Max ", stats[3])
+        print("Min ", stats[4])
+        validMoves = get_valid_moves(board);
+
+        if bestMove is None:
+            return validMoves[0]
+
+        print("Best Utility ", bestMove.stateScore)
+        print("Best State Depth ", bestMove.getLevel())
+        currentUtility = self.evaluation_function(make_move(board, bestMove.moves[0], self.player_number), 1)[0]
+        print("Current Utility ", currentUtility)
+        print()
+        return bestMove.moves[0]
 
 
     def evaluation_function(self, board, depth):
@@ -306,7 +374,7 @@ class AIPlayer:
                 s += 1
                 e += 1
 
-            return total * total * total
+            return total
 
             # op_num = 1 if player == 2 else 2
             # # get sequences
@@ -350,6 +418,7 @@ class AIPlayer:
             #
             # return sum(validSeq)
 
+        # count how many valid sequences the player has
         count = 0
         count += count_horizontal(board, self.player_number)
         count += count_verticle(board, self.player_number)
@@ -359,9 +428,48 @@ class AIPlayer:
         count -= count_verticle(board, self.other_player_number)
         count -= count_diagonal(board, self.other_player_number)
 
-        winState = is_winning_state(board)
 
-        return count / (depth + 1), winState
+
+        # count how many winning possibilities the player has for next move and the move after
+        validMoves = get_valid_moves(board)
+        nextMoveWinningStates = 0
+        firstPlayer = getPlayerTurn(board)
+        winFirst = 0
+        for mOp in validMoves:
+            bOp = make_move(board, mOp, firstPlayer)
+            if is_winning_state(bOp)[1 if firstPlayer == 2 else 0]:
+                winFirst +=1
+
+        otherPlayer = 2 if firstPlayer == 1 else 1
+        winSecond = 0
+        for mOp in validMoves:
+            bOp = make_move(board, mOp, otherPlayer)
+            if is_winning_state(bOp)[1 if otherPlayer == 2 else 0]:
+                winSecond +=1
+
+        if firstPlayer == self.player_number:
+            if winFirst > 0:
+                nextMoveWinningStates += winFirst
+            elif winSecond > 0:
+                nextMoveWinningStates -= (winSecond - 1)
+        else:
+            if winFirst > 0:
+                nextMoveWinningStates -= winFirst
+            elif winSecond > 0:
+                nextMoveWinningStates += (winSecond - 1)
+
+
+
+        count += pow(nextMoveWinningStates, 7) * 100
+
+        winState = is_winning_state(board)
+        if winState[0]:
+            count += 10000000
+        if winState[1]:
+            count -= 10000000
+
+
+        return count / (depth + 1), winState[0] or winState[1]
 
 
 class RandomPlayer:
